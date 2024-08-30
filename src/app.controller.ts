@@ -34,12 +34,12 @@ export class AppController {
     utils.book_append_sheet(wb, ws, 'Report');
 
     var buf = write(wb, {type: "buffer", bookType: "xlsx"});
-
+      
     return new StreamableFile(buf);
   }
 
   @Post()
-  async createRep(@Body() data: string): Promise<JSON> {
+  async createRep(@Body() data: string): Promise<StreamableFile> {
     console.log(data);
     return this.appService.createRep(data);
   }
