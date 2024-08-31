@@ -26,22 +26,16 @@ export class AppController {
       return this.appService.findId(docId);
   }
 
-  @Get('download')
-  async download(@Param('docId') docId: number): Promise<StreamableFile> {
-    let fileName = JSON.parse(JSON.stringify(this.appService.findId(docId))).name;
-    var ws = utils.json_to_sheet(fileName);
-    var wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, 'Report');
-
-    var buf = write(wb, {type: "buffer", bookType: "xlsx"});
-      
-    return new StreamableFile(buf);
+  @Post()
+  async createRep(@Body() data: string): Promise<number> {
+    console.log(data);
+    return await this.appService.createRep(data);
   }
 
-  @Post()
-  async createRep(@Body() data: string): Promise<StreamableFile> {
-    console.log(data);
-    return this.appService.createRep(data);
+  @Get(':id')
+  async repById(@Param('id') id: number): Promise<string | StreamableFile> {
+    console.log('requested id: ' + id);
+    return await this.appService.getRep(id);
   }
 
 }

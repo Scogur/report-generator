@@ -8,4 +8,7 @@ export class RepStat {
     @Column()
     status: number;
 
+    @Column({ "type": "bytea", "nullable": true })
+    data: Buffer;
+
 }

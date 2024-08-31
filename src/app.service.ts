@@ -1,25 +1,8 @@
 import { Injectable, Inject, StreamableFile } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
-import { Report } from "./report.entity";
+import { Repository } from 'typeorm';
+import { Report } from './report.entity';
 import { RepStat } from './repstat.entity';
 import { utils, write } from 'xlsx';
-
-const AppDataSource = new DataSource({
-  type: 'postgres',
-  host: 'localhost',
-  port: 5432,
-  username: 'postgres',
-  password: '1234',
-  database: 'repdoc',
-});
-
-AppDataSource.initialize()
-    .then(() => {
-        console.log("Data Source has been initialized!")
-    })
-    .catch((err) => {
-        console.error("Error during Data Source initialization", err)
-    })
 
 @Injectable()
 export class AppService {
@@ -27,66 +10,83 @@ export class AppService {
     @Inject('REPORT_REPOSITORY')
     private reportRepository: Repository<Report>,
     @Inject('REPSTAT_REPOSITORY')
-    private repstatRepository: Repository<RepStat>
+    private repstatRepository: Repository<RepStat>,
   ) {}
 
-  getHello(): JSON {
-    let report = {
-      name: "NAME1"
-    };
-    return JSON.parse(JSON.stringify(report));
-  }
-
-  getReport(docId: number, endpoint: number): JSON {
-    let report = {
-      id: docId,
-      name: "NAME1"
-    };
-    return JSON.parse(JSON.stringify(report));
-  }
-
-  findId(docId:number): JSON {
-    
+  findId(docId: number): JSON {
     //check document status
-    let status = "active";
+    let status = 'active';
     let report = {
       id: docId,
-      name: "NAME"+docId,
+      name: 'NAME' + docId,
       status: status,
     };
     return JSON.parse(JSON.stringify(report));
   }
 
-  async createRep(data:string) {
+  async createRep(data: string) {
     let jdata = JSON.parse(JSON.stringify(data));
     let tnar = new Array<string>();
-    jdata.tableheads.forEach(element => {
+    jdata.tableheads.forEach((element) => {
       tnar.push(`${jdata.tablename}.` + element);
     });
 
-      const rr = await this.reportRepository
+    const rr = await this.reportRepository
       .createQueryBuilder(jdata.tablename)
       .select(tnar)
       .getMany();
 
-      let wb = this.genRep(JSON.parse(JSON.stringify(rr)));
 
-      var buf = write(wb, {type: "buffer", bookType: "xlsx"});
-      console.log(new StreamableFile(buf));
-      return new StreamableFile(buf);
-
-    //console.log(rr);
-    //return JSON.parse(JSON.stringify(rr));
-
-    //return JSON.parse(JSON.stringify({link: 'https://google.com'}));
+    const rsrep = await this.repstatRepository
+      .createQueryBuilder()
+      .insert()
+      .into(RepStat)
+      .values({ status: 2 })
+      .returning('rep_stat.id')
+      .execute();
+    let newid = JSON.parse(JSON.stringify(rsrep)).raw[0].id;
+    console.log(newid);
+    this.genRep(JSON.parse(JSON.stringify(rr)), newid);
+    return newid;
+    /*return new StreamableFile(
+      await this.genRep(JSON.parse(JSON.stringify(rr))),
+    );*/
   }
 
-  genRep(data){
-
-    //let sb = this.repstatRepository;
+  async genRep(data, newid) {
     var worksheet = utils.json_to_sheet(data);
     const workbook = utils.book_new();
     utils.book_append_sheet(workbook, worksheet, 'Report');
-    return workbook;
+    var buf = write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    const rsr = this.repstatRepository
+      .createQueryBuilder()
+      .update(RepStat)
+      .set({ status: 1, data: buf })
+      .where('id = :id', { id: newid })
+      .execute();
+    //status '1' = done; status '2' = wip
+    return buf;
+  }
+
+  async getRep(id: number) {
+    const rr = await this.repstatRepository
+      .createQueryBuilder('rep_stat')
+      .select(['data', 'status'])
+      .where('rep_stat.id = :id', { id: id })
+      .getRawOne();
+    if (JSON.parse(JSON.stringify(rr)).status == 1) {
+      let ret = {
+        status: JSON.parse(JSON.stringify(rr)).status,
+        data: new StreamableFile(Uint8Array.from(JSON.parse(JSON.stringify(rr)).data.data))
+      }
+      return JSON.parse(JSON.stringify(ret));
+    } else {
+      let ret = {
+        status: JSON.parse(JSON.stringify(rr)).status,
+        data: null,
+      }
+      return JSON.parse(JSON.stringify(ret));
+    }
   }
 }
